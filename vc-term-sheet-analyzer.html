@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PE/VC Term Sheet Analyzer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .input-group { margin-bottom: 1rem; }
+    .input-group label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.25rem; }
+    .input-group input, .input-group select { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; }
+    .input-group input:focus, .input-group select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+    .card { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .tab-btn { padding: 0.75rem 1.5rem; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent; color: #6b7280; cursor: pointer; }
+    .tab-btn.active { border-bottom-color: #3b82f6; color: #3b82f6; }
+    .tab-btn:hover { color: #374151; }
+    .metric-box { padding: 1rem; border-radius: 0.5rem; }
+    .metric-box.blue { background: #eff6ff; }
+    .metric-box.green { background: #f0fdf4; }
+    .metric-box.amber { background: #fffbeb; }
+    .metric-box.red { background: #fef2f2; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; font-weight: 600; }
+    .text-right { text-align: right; }
+    .comparison-card { padding: 1.5rem; border-radius: 0.5rem; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="max-w-7xl mx-auto py-8 px-4">
+
+    <!-- Header -->
+    <div class="card">
+      <h1 class="text-2xl font-bold text-gray-900">PE/VC Term Sheet Analyzer</h1>
+      <p class="text-gray-600 mt-1">Analyze nominal vs effective valuations based on term sheet provisions</p>
+      <p class="text-xs text-gray-400 mt-2">Based on Woronoff & Rosen, "Effective vs Nominal Valuations in Venture Capital Investing"</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="card" style="padding: 0;">
+      <div class="flex border-b flex-wrap">
+        <button class="tab-btn active" onclick="showTab('analysis')">Full Analysis</button>
+        <button class="tab-btn" onclick="showTab('compare')">Compare Term Sheets</button>
+        <button class="tab-btn" onclick="showTab('scenarios')">Scenario Analysis</button>
+        <button class="tab-btn" onclick="showTab('sensitivity')">Sensitivity Analysis</button>
+      </div>
+    </div>
+
+    <!-- Analysis Tab -->
+    <div id="tab-analysis">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Input Panel -->
+        <div class="lg:col-span-1">
+          <div class="card">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Term Sheet Parameters</h3>
+
+            <div class="input-group">
+              <label>Investment Amount ($M)</label>
+              <input type="number" id="investment" value="5" step="0.5" min="0.1" onchange="updateAll()">
+            </div>
+
+            <div class="input-group">
+              <label>Pre-Money Valuation ($M)</label>
+              <input type="number" id="preMoneyValuation" value="15" step="1" min="1" onchange="updateAll()">
+            </div>
+
+            <div class="metric-box bg-gray-50 mb-4">
+              <div class="text-sm text-gray-600">Post-Money Valuation</div>
+              <div class="text-lg font-semibold text-gray-900" id="postMoneyDisplay">$20.00M</div>
+              <div class="text-sm text-gray-500" id="ownershipDisplay">VC Ownership: 25.0%</div>
+            </div>
+
+            <div class="input-group">
+              <label>Liquidation Preference Multiple</label>
+              <select id="liquidationMultiple" onchange="updateAll()">
+                <option value="1">1x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
+                <option value="2.5">2.5x</option>
+                <option value="3">3x</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label>Preferred Stock Type</label>
+              <select id="isParticipating" onchange="updateAll()">
+                <option value="false">Non-Participating (Straight)</option>
+                <option value="true">Participating</option>
+              </select>
+            </div>
+
+            <div class="input-group" id="capGroup" style="display:none;">
+              <label>Participation Cap (0 = no cap)</label>
+              <select id="participationCap" onchange="updateAll()">
+                <option value="0">No Cap</option>
+                <option value="2">2x</option>
+                <option value="3">3x</option>
+                <option value="4">4x</option>
+                <option value="5">5x</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label>Cumulative Dividend Rate (%)</label>
+              <input type="number" id="dividendRate" value="0" step="1" min="0" max="20" onchange="updateAll()">
+            </div>
+
+            <div class="input-group">
+              <label>Years to Exit</label>
+              <input type="number" id="yearsToExit" value="3" step="0.5" min="0" max="15" onchange="updateAll()">
+            </div>
+          </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div class="lg:col-span-2">
+          <!-- Exit Slider -->
+          <div class="card">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Analyze at Exit Value</label>
+            <input type="range" id="exitSlider" min="1" max="200" value="50" class="w-full" oninput="updateAll()">
+            <div class="text-center text-lg font-medium mt-2" id="exitValueDisplay">$50.00M</div>
+          </div>
+
+          <!-- Valuation Summary -->
+          <div class="card">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Valuation Analysis</h3>
+
+            <div class="grid grid-cols-2 gap-6 mb-4">
+              <div>
+                <h4 class="font-medium text-gray-700 mb-3">Nominal Values</h4>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between"><span class="text-gray-600">Pre-Money:</span><span class="font-medium" id="nominalPre">$15.00M</span></div>
+                  <div class="flex justify-between"><span class="text-gray-600">Post-Money:</span><span class="font-medium" id="nominalPost">$20.00M</span></div>
+                  <div class="flex justify-between"><span class="text-gray-600">VC Ownership:</span><span class="font-medium" id="nominalOwnership">25.0%</span></div>
+                </div>
+              </div>
+              <div>
+                <h4 class="font-medium text-gray-700 mb-3">Effective Values</h4>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between"><span class="text-gray-600">Pre-Money:</span><span class="font-medium" id="effectivePre">$15.00M</span></div>
+                  <div class="flex justify-between"><span class="text-gray-600">Post-Money:</span><span class="font-medium" id="effectivePost">$20.00M</span></div>
+                  <div class="flex justify-between"><span class="text-gray-600">VC % of Exit:</span><span class="font-medium" id="effectivePercent">25.0%</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+              <div class="metric-box blue">
+                <div class="text-sm text-blue-600">VC Receives</div>
+                <div class="text-xl font-bold text-blue-900" id="vcPayout">$12.50M</div>
+                <div class="text-xs text-blue-600" id="vcStatus">(Converted to common)</div>
+              </div>
+              <div class="metric-box green">
+                <div class="text-sm text-green-600">Founder Receives</div>
+                <div class="text-xl font-bold text-green-900" id="founderPayout">$37.50M</div>
+                <div class="text-xs text-green-600" id="founderPercent">75.0% of exit</div>
+              </div>
+            </div>
+
+            <div class="metric-box amber">
+              <div class="font-medium text-amber-800">Key Thresholds</div>
+              <div class="text-amber-700 mt-1 text-sm">
+                <span>Liquidation Preference: <strong id="liqPrefDisplay">$5.00M</strong></span>
+                <span class="mx-2">•</span>
+                <span>Indifference Value: <strong id="indiffDisplay">$20.00M</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart -->
+          <div class="card">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Value Distribution by Exit Value</h3>
+            <canvas id="payoutChart" height="250"></canvas>
+          </div>
+
+          <!-- Effective Valuation Chart -->
+          <div class="card">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Effective vs Nominal Pre-Money Valuation</h3>
+            <canvas id="valuationChart" height="250"></canvas>
+            <div class="mt-4 text-sm text-gray-600 bg-gray-50 p-3 rounded">
+              <strong>Key Insight:</strong> The effective pre-money valuation only equals the nominal valuation when exit proceeds exceed the indifference value. Below this threshold, term sheet provisions transfer value from founders to investors.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payout Table -->
+      <div class="card">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Payout Waterfall Table</h3>
+        <div class="overflow-x-auto">
+          <table id="payoutTable">
+            <thead>
+              <tr>
+                <th>Exit Value</th>
+                <th class="text-right">VC Payout</th>
+                <th class="text-right">VC %</th>
+                <th class="text-right">Founder Payout</th>
+                <th class="text-right">Founder %</th>
+                <th class="text-right">Effective Pre-$</th>
+                <th class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compare Tab -->
+    <div id="tab-compare" style="display:none;">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- Term Sheet A -->
+        <div class="card">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Term Sheet A</h3>
+          <div class="input-group">
+            <label>Investment ($M)</label>
+            <input type="number" id="investmentA" value="5" step="0.5" onchange="updateComparison()">
+          </div>
+          <div class="input-group">
+            <label>Pre-Money ($M)</label>
+            <input type="number" id="preMoneyA" value="15" step="1" onchange="updateComparison()">
+          </div>
+          <div class="input-group">
+            <label>Liq. Pref Multiple</label>
+            <select id="liqMultA" onchange="updateComparison()">
+              <option value="1">1x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2x</option>
+              <option value="3">3x</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Type</label>
+            <select id="participatingA" onchange="updateComparison()">
+              <option value="false">Non-Participating</option>
+              <option value="true">Participating</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Term Sheet B -->
+        <div class="card">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Term Sheet B</h3>
+          <div class="input-group">
+            <label>Investment ($M)</label>
+            <input type="number" id="investmentB" value="5" step="0.5" onchange="updateComparison()">
+          </div>
+          <div class="input-group">
+            <label>Pre-Money ($M)</label>
+            <input type="number" id="preMoneyB" value="20" step="1" onchange="updateComparison()">
+          </div>
+          <div class="input-group">
+            <label>Liq. Pref Multiple</label>
+            <select id="liqMultB" onchange="updateComparison()">
+              <option value="1">1x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2" selected>2x</option>
+              <option value="3">3x</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Type</label>
+            <select id="participatingB" onchange="updateComparison()">
+              <option value="false">Non-Participating</option>
+              <option value="true" selected>Participating</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comparison Slider -->
+      <div class="card">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Compare at Exit Value</label>
+        <input type="range" id="compareSlider" min="1" max="200" value="50" class="w-full" oninput="updateComparison()">
+        <div class="text-center text-lg font-medium mt-2" id="compareExitDisplay">$50.00M</div>
+      </div>
+
+      <!-- Comparison Results -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="comparison-card bg-blue-50">
+          <h4 class="font-semibold text-blue-900 mb-3">Term Sheet A</h4>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span>Founder Receives:</span><span class="font-bold text-blue-900" id="founderA">$37.50M</span></div>
+            <div class="flex justify-between"><span>Founder % of Exit:</span><span id="founderPctA">75.0%</span></div>
+            <div class="flex justify-between"><span>Effective Pre-Money:</span><span id="effPreA">$15.00M</span></div>
+          </div>
+        </div>
+        <div class="comparison-card bg-green-50">
+          <h4 class="font-semibold text-green-900 mb-3">Term Sheet B</h4>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span>Founder Receives:</span><span class="font-bold text-green-900" id="founderB">$30.00M</span></div>
+            <div class="flex justify-between"><span>Founder % of Exit:</span><span id="founderPctB">60.0%</span></div>
+            <div class="flex justify-between"><span>Effective Pre-Money:</span><span id="effPreB">$12.50M</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="winnerBox">
+        <div class="text-center font-semibold" id="winnerText">Term Sheet A is better for founders by $7.50M</div>
+      </div>
+
+      <!-- Comparison Chart -->
+      <div class="card">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Founder Payout Comparison</h3>
+        <canvas id="comparisonChart" height="250"></canvas>
+      </div>
+    </div>
+
+    <!-- Scenario Analysis Tab -->
+    <div id="tab-scenarios" style="display:none;">
+      <!-- Exit Scenarios -->
+      <div class="card">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Exit Scenarios</h3>
+        <p class="text-sm text-gray-600 mb-4">Define three exit scenarios with their probability weights. Probabilities must sum to 100%.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <!-- Upside -->
+          <div class="p-4 bg-green-50 rounded-lg">
+            <div class="font-medium text-green-800 mb-3">📈 Upside Case</div>
+            <div class="input-group">
+              <label>Exit Value ($M)</label>
+              <input type="number" id="scenarioUpside" value="200" step="10" min="1" onchange="updateScenarios()">
+            </div>
+            <div class="input-group">
+              <label>Probability (%)</label>
+              <input type="number" id="probUpside" value="20" step="5" min="0" max="100" onchange="updateScenarios()">
+            </div>
+          </div>
+
+          <!-- Base -->
+          <div class="p-4 bg-blue-50 rounded-lg">
+            <div class="font-medium text-blue-800 mb-3">📊 Base Case</div>
+            <div class="input-group">
+              <label>Exit Value ($M)</label>
+              <input type="number" id="scenarioBase" value="100" step="10" min="1" onchange="updateScenarios()">
+            </div>
+            <div class="input-group">
+              <label>Probability (%)</label>
+              <input type="number" id="probBase" value="50" step="5" min="0" max="100" onchange="updateScenarios()">
+            </div>
+          </div>
+
+          <!-- Downside -->
+          <div class="p-4 bg-red-50 rounded-lg">
+            <div class="font-medium text-red-800 mb-3">📉 Downside Case</div>
+            <div class="input-group">
+              <label>Exit Value ($M)</label>
+              <input type="number" id="scenarioDownside" value="50" step="10" min="1" onchange="updateScenarios()">
+            </div>
+            <div class="input-group">
+              <label>Probability (%)</label>
+              <input type="number" id="probDownside" value="30" step="5" min="0" max="100" onchange="updateScenarios()">
+            </div>
+          </div>
+        </div>
+
+        <div id="probWarning" class="text-red-600 text-sm mb-2" style="display:none;">
+          ⚠️ Probabilities must sum to 100%. Currently: <span id="probSum">100</span>%
+        </div>
+      </div>
+
+      <!-- Term Sheet Configurations -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="card">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Structure A</h3>
+          <div class="input-group">
+            <label>Investment ($M)</label>
+            <input type="number" id="scInvestmentA" value="10" step="1" onchange="updateScenarios()">
+          </div>
+          <div class="input-group">
+            <label>Pre-Money ($M)</label>
+            <input type="number" id="scPreMoneyA" value="40" step="5" onchange="updateScenarios()">
+          </div>
+          <div class="metric-box bg-gray-50 mb-4">
+            <div class="text-sm text-gray-600">Post-Money / VC Ownership</div>
+            <div class="font-semibold text-gray-900" id="scSummaryA">$50.00M / 20.0%</div>
+          </div>
+          <div class="input-group">
+            <label>Liq. Pref Multiple</label>
+            <select id="scLiqMultA" onchange="updateScenarios()">
+              <option value="1" selected>1x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2x</option>
+              <option value="3">3x</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Type</label>
+            <select id="scParticipatingA" onchange="updateScenarios()">
+              <option value="false" selected>Non-Participating</option>
+              <option value="true">Participating</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Structure B</h3>
+          <div class="input-group">
+            <label>Investment ($M)</label>
+            <input type="number" id="scInvestmentB" value="10" step="1" onchange="updateScenarios()">
+          </div>
+          <div class="input-group">
+            <label>Pre-Money ($M)</label>
+            <input type="number" id="scPreMoneyB" value="40" step="5" onchange="updateScenarios()">
+          </div>
+          <div class="metric-box bg-gray-50 mb-4">
+            <div class="text-sm text-gray-600">Post-Money / VC Ownership</div>
+            <div class="font-semibold text-gray-900" id="scSummaryB">$50.00M / 20.0%</div>
+          </div>
+          <div class="input-group">
+            <label>Liq. Pref Multiple</label>
+            <select id="scLiqMultB" onchange="updateScenarios()">
+              <option value="1">1x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2" selected>2x</option>
+              <option value="3">3x</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Type</label>
+            <select id="scParticipatingB" onchange="updateScenarios()">
+              <option value="false">Non-Participating</option>
+              <option value="true" selected>Participating</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario Results Table -->
+      <div class="card">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Scenario Payouts</h3>
+        <div class="overflow-x-auto">
+          <table id="scenarioTable">
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th class="text-right">Exit Value</th>
+                <th class="text-right">Probability</th>
+                <th class="text-right">Founder (A)</th>
+                <th class="text-right">Founder (B)</th>
+                <th class="text-right">A vs B</th>
+                <th class="text-center">Better For Founder</th>
+              </tr>
+            </thead>
+            <tbody id="scenarioTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Summary Statistics -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="card">
+          <h3 class="text-lg font-semibold text-blue-900 mb-4 pb-2 border-b">Structure A Statistics</h3>
+          <div class="space-y-3">
+            <div class="flex justify-between"><span class="text-gray-600">Expected Founder Payout:</span><span class="font-bold text-lg" id="evA">$0.00M</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Std Deviation:</span><span class="font-medium" id="stdA">$0.00M</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Min Payout (Downside):</span><span class="font-medium" id="minA">$0.00M</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Max Payout (Upside):</span><span class="font-medium" id="maxA">$0.00M</span></div>
+            <hr class="my-2">
+            <div class="flex justify-between"><span class="text-gray-600">Expected Value Transfer to VC:</span><span class="font-medium" id="transferA">$0.00M</span></div>
+            <div class="text-xs text-gray-500">Amount VC receives above their nominal ownership %</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="text-lg font-semibold text-green-900 mb-4 pb-2 border-b">Structure B Statistics</h3>
+          <div class="space-y-3">
+            <div class="flex justify-between"><span class="text-gray-600">Expected Founder Payout:</span><span class="font-bold text-lg" id="evB">$0.00M</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Std Deviation:</span><span class="font-medium" id="stdB">$0.00M</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Min Payout (Downside):</span><span class="font-medium" id="minB">$0.00M</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Max Payout (Upside):</span><span class="font-medium" id="maxB">$0.00M</span></div>
+            <hr class="my-2">
+            <div class="flex justify-between"><span class="text-gray-600">Expected Value Transfer to VC:</span><span class="font-medium" id="transferB">$0.00M</span></div>
+            <div class="text-xs text-gray-500">Amount VC receives above their nominal ownership %</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Winner Box -->
+      <div class="card" id="scenarioWinnerBox">
+        <div class="text-center">
+          <div class="text-lg font-bold mb-2" id="scenarioWinnerText">Structure A is better for founders</div>
+          <div class="text-sm text-gray-600" id="scenarioWinnerDetail">Expected value difference: $0.00M</div>
+        </div>
+      </div>
+
+      <!-- Scenario Chart -->
+      <div class="card">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Founder Payouts by Scenario</h3>
+        <canvas id="scenarioChart" height="250"></canvas>
+      </div>
+
+      <!-- Value Transfer Visualization -->
+      <div class="card">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Value Transfer Analysis</h3>
+        <p class="text-sm text-gray-600 mb-4">Shows how much $ flows to VC beyond their nominal ownership % at each scenario. Positive = VC gains more than their pro-rata share.</p>
+        <canvas id="transferChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- Sensitivity Tab -->
+    <div id="tab-sensitivity" style="display:none;">
+      <div class="card">
+        <div class="flex justify-between items-center mb-4 pb-2 border-b">
+          <h3 class="text-lg font-semibold text-gray-900">Sensitivity Analysis</h3>
+          <button onclick="exportCSV()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Export CSV</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table id="sensitivityTable">
+            <thead>
+              <tr>
+                <th>Exit Multiple</th>
+                <th class="text-right">Exit Value</th>
+                <th class="text-right">VC Payout</th>
+                <th class="text-right">Founder Payout</th>
+                <th class="text-right">Founder %</th>
+                <th class="text-right">Effective Pre-$</th>
+                <th class="text-right">% of Nominal</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Effective Valuation as % of Nominal</h3>
+        <canvas id="sensitivityChart" height="250"></canvas>
+      </div>
+    </div>
+
+    <!-- Key Concepts -->
+    <div class="card">
+      <h3 class="font-semibold text-gray-900 mb-3">Key Concepts</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+        <div><strong class="text-gray-800">Nominal Valuation:</strong> The headline pre-money/post-money values based on simple ownership percentage.</div>
+        <div><strong class="text-gray-800">Effective Valuation:</strong> The actual implied valuation when accounting for liquidation preferences, participation, etc.</div>
+        <div><strong class="text-gray-800">Liquidation Preference:</strong> Amount investors receive before common shareholders. A 2x on $5M = $10M paid first.</div>
+        <div><strong class="text-gray-800">Indifference Value:</strong> Exit value where VC is indifferent between preference or converting to common.</div>
+        <div><strong class="text-gray-800">Participating Preferred:</strong> "Double dip" - investor gets preference PLUS pro-rata share of remaining.</div>
+        <div><strong class="text-gray-800">Non-Participating:</strong> Investor chooses preference OR conversion, not both. More founder-friendly.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================
+    // PE/VC Term Sheet Analyzer - Calculation Engine
+    // Based on Woronoff & Rosen paper formulas
+    // ============================================
+
+    let payoutChart, valuationChart, comparisonChart, sensitivityChart;
+
+    function formatCurrency(value) {
+      if (value >= 1e9) return '$' + (value / 1e9).toFixed(2) + 'B';
+      if (value >= 1e6) return '$' + (value / 1e6).toFixed(2) + 'M';
+      if (value >= 1e3) return '$' + (value / 1e3).toFixed(0) + 'K';
+      return '$' + value.toFixed(2);
+    }
+
+    function formatPercent(value) {
+      return (value * 100).toFixed(1) + '%';
+    }
+
+    // Core calculation from the paper (Formulas 1-7)
+    function calculatePayouts(exitValue, params) {
+      const { investment, preMoneyValuation, liquidationMultiple, isParticipating, participationCap, dividendRate, yearsToExit } = params;
+
+      const postMoneyValuation = preMoneyValuation + investment;
+      const vcOwnership = investment / postMoneyValuation;
+      const founderOwnership = 1 - vcOwnership;
+
+      // Cumulative dividends add to liquidation preference
+      const accruedDividends = investment * dividendRate * yearsToExit;
+      const totalLiquidationPreference = (investment * liquidationMultiple) + accruedDividends;
+
+      // Formula 7: Indifference Value
+      const indifferenceValue = totalLiquidationPreference / vcOwnership;
+
+      let vcPayout = 0;
+      let founderPayout = 0;
+      let vcConverted = false;
+
+      if (exitValue <= 0) {
+        vcPayout = 0;
+        founderPayout = 0;
+      } else if (isParticipating) {
+        // Participating preferred: gets preference + participation
+        if (exitValue <= totalLiquidationPreference) {
+          vcPayout = exitValue;
+          founderPayout = 0;
+        } else {
+          const remainingAfterPref = exitValue - totalLiquidationPreference;
+          const participationAmount = remainingAfterPref * vcOwnership;
+          let totalVcPayout = totalLiquidationPreference + participationAmount;
+
+          if (participationCap > 0) {
+            const capAmount = investment * participationCap;
+            if (totalVcPayout > capAmount) {
+              const convertedPayout = exitValue * vcOwnership;
+              if (convertedPayout > capAmount) {
+                vcPayout = convertedPayout;
+                vcConverted = true;
+              } else {
+                vcPayout = capAmount;
+              }
+            } else {
+              vcPayout = totalVcPayout;
+            }
+          } else {
+            vcPayout = totalVcPayout;
+          }
+          founderPayout = exitValue - vcPayout;
+        }
+      } else {
+        // Non-participating: gets preference OR conversion
+        if (exitValue <= totalLiquidationPreference) {
+          vcPayout = exitValue;
+          founderPayout = 0;
+        } else {
+          const convertedPayout = exitValue * vcOwnership;
+          if (convertedPayout > totalLiquidationPreference) {
+            vcPayout = convertedPayout;
+            vcConverted = true;
+          } else {
+            vcPayout = totalLiquidationPreference;
+          }
+          founderPayout = exitValue - vcPayout;
+        }
+      }
+
+      // Formulas 4-6: Effective valuation
+      const vcPercentOfExit = exitValue > 0 ? vcPayout / exitValue : 0;
+      const effectivePostMoney = vcPercentOfExit > 0 ? investment / vcPercentOfExit : 0;
+      const effectivePreMoney = effectivePostMoney - investment;
+
+      return {
+        exitValue, vcPayout, founderPayout, vcPercentOfExit,
+        founderPercentOfExit: 1 - vcPercentOfExit, vcConverted,
+        effectivePreMoney, effectivePostMoney,
+        nominalPreMoney: preMoneyValuation, nominalPostMoney: postMoneyValuation,
+        totalLiquidationPreference, indifferenceValue, vcOwnership, founderOwnership
+      };
+    }
+
+    function getParams() {
+      return {
+        investment: parseFloat(document.getElementById('investment').value) * 1e6,
+        preMoneyValuation: parseFloat(document.getElementById('preMoneyValuation').value) * 1e6,
+        liquidationMultiple: parseFloat(document.getElementById('liquidationMultiple').value),
+        isParticipating: document.getElementById('isParticipating').value === 'true',
+        participationCap: parseFloat(document.getElementById('participationCap').value),
+        dividendRate: parseFloat(document.getElementById('dividendRate').value) / 100,
+        yearsToExit: parseFloat(document.getElementById('yearsToExit').value)
+      };
+    }
+
+    function updateAll() {
+      const params = getParams();
+      const exitValue = parseFloat(document.getElementById('exitSlider').value) * 1e6;
+      const result = calculatePayouts(exitValue, params);
+
+      // Show/hide participation cap
+      document.getElementById('capGroup').style.display = params.isParticipating ? 'block' : 'none';
+
+      // Update displays
+      document.getElementById('postMoneyDisplay').textContent = formatCurrency(params.preMoneyValuation + params.investment);
+      document.getElementById('ownershipDisplay').textContent = 'VC Ownership: ' + formatPercent(result.vcOwnership);
+      document.getElementById('exitValueDisplay').textContent = formatCurrency(exitValue);
+
+      document.getElementById('nominalPre').textContent = formatCurrency(result.nominalPreMoney);
+      document.getElementById('nominalPost').textContent = formatCurrency(result.nominalPostMoney);
+      document.getElementById('nominalOwnership').textContent = formatPercent(result.vcOwnership);
+
+      document.getElementById('effectivePre').textContent = formatCurrency(Math.max(0, result.effectivePreMoney));
+      document.getElementById('effectivePre').className = result.effectivePreMoney < result.nominalPreMoney ? 'font-medium text-red-600' : 'font-medium text-green-600';
+      document.getElementById('effectivePost').textContent = formatCurrency(result.effectivePostMoney);
+      document.getElementById('effectivePercent').textContent = formatPercent(result.vcPercentOfExit);
+      document.getElementById('effectivePercent').className = result.vcPercentOfExit > result.vcOwnership ? 'font-medium text-red-600' : 'font-medium text-green-600';
+
+      document.getElementById('vcPayout').textContent = formatCurrency(result.vcPayout);
+      document.getElementById('vcStatus').textContent = result.vcConverted ? '(Converted to common)' : '(Liquidation preference)';
+      document.getElementById('founderPayout').textContent = formatCurrency(result.founderPayout);
+      document.getElementById('founderPercent').textContent = formatPercent(result.founderPercentOfExit) + ' of exit';
+
+      document.getElementById('liqPrefDisplay').textContent = formatCurrency(result.totalLiquidationPreference);
+      document.getElementById('indiffDisplay').textContent = formatCurrency(result.indifferenceValue);
+
+      updateCharts(params);
+      updateTable(params);
+      updateSensitivityTable(params);
+    }
+
+    function updateCharts(params) {
+      const postMoney = params.preMoneyValuation + params.investment;
+      const maxExit = Math.max(postMoney * 5, params.investment * 10);
+      const step = maxExit / 30;
+
+      const labels = [];
+      const vcData = [];
+      const founderData = [];
+      const effectiveData = [];
+      const nominalData = [];
+
+      for (let exit = 0; exit <= maxExit; exit += step) {
+        const r = calculatePayouts(exit, params);
+        labels.push(formatCurrency(exit));
+        vcData.push(r.vcPayout / 1e6);
+        founderData.push(r.founderPayout / 1e6);
+        effectiveData.push(Math.max(0, r.effectivePreMoney / 1e6));
+        nominalData.push(r.nominalPreMoney / 1e6);
+      }
+
+      // Payout Chart
+      if (payoutChart) payoutChart.destroy();
+      payoutChart = new Chart(document.getElementById('payoutChart'), {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'VC Payout ($M)', data: vcData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true },
+            { label: 'Founder Payout ($M)', data: founderData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { intersect: false, mode: 'index' },
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'Payout ($M)' } } }
+        }
+      });
+
+      // Valuation Chart
+      if (valuationChart) valuationChart.destroy();
+      valuationChart = new Chart(document.getElementById('valuationChart'), {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Effective Pre-Money ($M)', data: effectiveData, borderColor: '#ef4444', borderWidth: 2, fill: false },
+            { label: 'Nominal Pre-Money ($M)', data: nominalData, borderColor: '#94a3b8', borderWidth: 2, borderDash: [5, 5], fill: false }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { intersect: false, mode: 'index' },
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'Pre-Money Valuation ($M)' } } }
+        }
+      });
+    }
+
+    function updateTable(params) {
+      const postMoney = params.preMoneyValuation + params.investment;
+      const exitValues = [
+        params.investment * 0.5, params.investment, params.investment * 1.5,
+        postMoney, postMoney * 1.5, postMoney * 2, postMoney * 3, postMoney * 5
+      ];
+
+      const tbody = document.querySelector('#payoutTable tbody');
+      tbody.innerHTML = '';
+
+      exitValues.forEach((exit, i) => {
+        const r = calculatePayouts(exit, params);
+        const row = document.createElement('tr');
+        row.className = i % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        row.innerHTML = `
+          <td class="font-medium">${formatCurrency(exit)}</td>
+          <td class="text-right text-blue-600">${formatCurrency(r.vcPayout)}</td>
+          <td class="text-right">${formatPercent(r.vcPercentOfExit)}</td>
+          <td class="text-right text-green-600">${formatCurrency(r.founderPayout)}</td>
+          <td class="text-right">${formatPercent(r.founderPercentOfExit)}</td>
+          <td class="text-right ${r.effectivePreMoney < r.nominalPreMoney ? 'text-red-600' : ''}">${formatCurrency(Math.max(0, r.effectivePreMoney))}</td>
+          <td class="text-center"><span class="px-2 py-1 rounded text-xs ${r.vcConverted ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}">${r.vcConverted ? 'Converted' : 'Preference'}</span></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function updateSensitivityTable(params) {
+      const postMoney = params.preMoneyValuation + params.investment;
+      const tbody = document.querySelector('#sensitivityTable tbody');
+      tbody.innerHTML = '';
+
+      const data = [];
+      for (let mult = 0.5; mult <= 10; mult += 0.5) {
+        const exit = postMoney * mult;
+        const r = calculatePayouts(exit, params);
+        const effPct = r.effectivePreMoney / params.preMoneyValuation;
+        data.push({ mult, exit, r, effPct });
+
+        const row = document.createElement('tr');
+        row.className = data.length % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        row.innerHTML = `
+          <td class="font-medium">${mult.toFixed(1)}x</td>
+          <td class="text-right">${formatCurrency(exit)}</td>
+          <td class="text-right text-blue-600">${formatCurrency(r.vcPayout)}</td>
+          <td class="text-right text-green-600">${formatCurrency(r.founderPayout)}</td>
+          <td class="text-right">${formatPercent(r.founderPercentOfExit)}</td>
+          <td class="text-right">${formatCurrency(Math.max(0, r.effectivePreMoney))}</td>
+          <td class="text-right ${effPct < 1 ? 'text-red-600' : 'text-green-600'}">${formatPercent(Math.max(0, effPct))}</td>
+        `;
+        tbody.appendChild(row);
+      }
+
+      // Update sensitivity chart
+      if (sensitivityChart) sensitivityChart.destroy();
+      sensitivityChart = new Chart(document.getElementById('sensitivityChart'), {
+        type: 'line',
+        data: {
+          labels: data.map(d => d.mult.toFixed(1) + 'x'),
+          datasets: [{
+            label: 'Effective / Nominal (%)',
+            data: data.map(d => Math.max(0, d.effPct) * 100),
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            fill: false
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true, max: 110, title: { display: true, text: '% of Nominal Valuation' } }
+          },
+          plugins: {
+            annotation: {
+              annotations: { line1: { type: 'line', yMin: 100, yMax: 100, borderColor: '#94a3b8', borderDash: [5, 5] } }
+            }
+          }
+        }
+      });
+    }
+
+    // Tab switching
+    function showTab(tabId) {
+      document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+      document.getElementById('tab-' + tabId).style.display = 'block';
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+
+      if (tabId === 'compare') updateComparison();
+      if (tabId === 'scenarios') updateScenarios();
+      if (tabId === 'sensitivity') updateSensitivityTable(getParams());
+    }
+
+    // ============================================
+    // Scenario Analysis Functions
+    // ============================================
+
+    let scenarioChart, transferChart;
+
+    function getScenarioParams(suffix) {
+      return {
+        investment: parseFloat(document.getElementById('scInvestment' + suffix).value) * 1e6,
+        preMoneyValuation: parseFloat(document.getElementById('scPreMoney' + suffix).value) * 1e6,
+        liquidationMultiple: parseFloat(document.getElementById('scLiqMult' + suffix).value),
+        isParticipating: document.getElementById('scParticipating' + suffix).value === 'true',
+        participationCap: 0,
+        dividendRate: 0,
+        yearsToExit: 0
+      };
+    }
+
+    function updateScenarios() {
+      // Get scenarios
+      const scenarios = [
+        { name: 'Upside', exit: parseFloat(document.getElementById('scenarioUpside').value) * 1e6, prob: parseFloat(document.getElementById('probUpside').value) / 100, color: 'green' },
+        { name: 'Base', exit: parseFloat(document.getElementById('scenarioBase').value) * 1e6, prob: parseFloat(document.getElementById('probBase').value) / 100, color: 'blue' },
+        { name: 'Downside', exit: parseFloat(document.getElementById('scenarioDownside').value) * 1e6, prob: parseFloat(document.getElementById('probDownside').value) / 100, color: 'red' }
+      ];
+
+      // Check probabilities sum to 100%
+      const totalProb = scenarios.reduce((sum, s) => sum + s.prob, 0);
+      const probWarning = document.getElementById('probWarning');
+      document.getElementById('probSum').textContent = (totalProb * 100).toFixed(0);
+      probWarning.style.display = Math.abs(totalProb - 1) > 0.001 ? 'block' : 'none';
+
+      // Get term sheet params
+      const paramsA = getScenarioParams('A');
+      const paramsB = getScenarioParams('B');
+
+      // Update summary displays
+      const postA = paramsA.preMoneyValuation + paramsA.investment;
+      const postB = paramsB.preMoneyValuation + paramsB.investment;
+      document.getElementById('scSummaryA').textContent = formatCurrency(postA) + ' / ' + formatPercent(paramsA.investment / postA);
+      document.getElementById('scSummaryB').textContent = formatCurrency(postB) + ' / ' + formatPercent(paramsB.investment / postB);
+
+      // Calculate payouts for each scenario
+      const resultsA = scenarios.map(s => ({ ...s, result: calculatePayouts(s.exit, paramsA) }));
+      const resultsB = scenarios.map(s => ({ ...s, result: calculatePayouts(s.exit, paramsB) }));
+
+      // Update scenario table
+      const tbody = document.getElementById('scenarioTableBody');
+      tbody.innerHTML = '';
+
+      scenarios.forEach((s, i) => {
+        const rA = resultsA[i].result;
+        const rB = resultsB[i].result;
+        const diff = rA.founderPayout - rB.founderPayout;
+        const winner = diff > 0 ? 'A' : diff < 0 ? 'B' : 'Tie';
+
+        const row = document.createElement('tr');
+        row.className = i % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        row.innerHTML = `
+          <td class="font-medium">${s.name}</td>
+          <td class="text-right">${formatCurrency(s.exit)}</td>
+          <td class="text-right">${formatPercent(s.prob)}</td>
+          <td class="text-right text-blue-600 font-medium">${formatCurrency(rA.founderPayout)}</td>
+          <td class="text-right text-green-600 font-medium">${formatCurrency(rB.founderPayout)}</td>
+          <td class="text-right ${diff > 0 ? 'text-blue-600' : diff < 0 ? 'text-green-600' : ''}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</td>
+          <td class="text-center"><span class="px-2 py-1 rounded text-xs ${winner === 'A' ? 'bg-blue-100 text-blue-800' : winner === 'B' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">${winner}</span></td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      // Calculate statistics
+      const statsA = calculateStats(resultsA, paramsA);
+      const statsB = calculateStats(resultsB, paramsB);
+
+      // Update stat displays
+      document.getElementById('evA').textContent = formatCurrency(statsA.expectedValue);
+      document.getElementById('stdA').textContent = formatCurrency(statsA.stdDev);
+      document.getElementById('minA').textContent = formatCurrency(statsA.min);
+      document.getElementById('maxA').textContent = formatCurrency(statsA.max);
+      document.getElementById('transferA').textContent = formatCurrency(statsA.valueTransfer);
+      document.getElementById('transferA').className = 'font-medium ' + (statsA.valueTransfer > 0 ? 'text-red-600' : 'text-green-600');
+
+      document.getElementById('evB').textContent = formatCurrency(statsB.expectedValue);
+      document.getElementById('stdB').textContent = formatCurrency(statsB.stdDev);
+      document.getElementById('minB').textContent = formatCurrency(statsB.min);
+      document.getElementById('maxB').textContent = formatCurrency(statsB.max);
+      document.getElementById('transferB').textContent = formatCurrency(statsB.valueTransfer);
+      document.getElementById('transferB').className = 'font-medium ' + (statsB.valueTransfer > 0 ? 'text-red-600' : 'text-green-600');
+
+      // Update winner box
+      const evDiff = statsA.expectedValue - statsB.expectedValue;
+      const winnerBox = document.getElementById('scenarioWinnerBox');
+      const winnerText = document.getElementById('scenarioWinnerText');
+      const winnerDetail = document.getElementById('scenarioWinnerDetail');
+
+      if (evDiff > 0) {
+        winnerBox.className = 'card bg-blue-100';
+        winnerText.textContent = '🏆 Structure A is better for founders (on expected value basis)';
+        winnerDetail.textContent = `Expected value advantage: ${formatCurrency(evDiff)} | Lower value transfer: ${formatCurrency(statsB.valueTransfer - statsA.valueTransfer)}`;
+      } else if (evDiff < 0) {
+        winnerBox.className = 'card bg-green-100';
+        winnerText.textContent = '🏆 Structure B is better for founders (on expected value basis)';
+        winnerDetail.textContent = `Expected value advantage: ${formatCurrency(-evDiff)} | Lower value transfer: ${formatCurrency(statsA.valueTransfer - statsB.valueTransfer)}`;
+      } else {
+        winnerBox.className = 'card bg-gray-100';
+        winnerText.textContent = 'Both structures yield equal expected founder returns';
+        winnerDetail.textContent = `Value transfer difference: ${formatCurrency(Math.abs(statsA.valueTransfer - statsB.valueTransfer))}`;
+      }
+
+      // Update charts
+      updateScenarioCharts(scenarios, resultsA, resultsB, paramsA, paramsB);
+    }
+
+    function calculateStats(results, params) {
+      const postMoney = params.preMoneyValuation + params.investment;
+      const vcOwnership = params.investment / postMoney;
+
+      // Expected value
+      const expectedValue = results.reduce((sum, r) => sum + r.prob * r.result.founderPayout, 0);
+
+      // Variance and Std Dev
+      const variance = results.reduce((sum, r) => sum + r.prob * Math.pow(r.result.founderPayout - expectedValue, 2), 0);
+      const stdDev = Math.sqrt(variance);
+
+      // Min/Max
+      const payouts = results.map(r => r.result.founderPayout);
+      const min = Math.min(...payouts);
+      const max = Math.max(...payouts);
+
+      // Value Transfer: How much VC receives beyond their nominal pro-rata share
+      // Positive = VC gains more than nominal %, negative = VC gets less (rare with preferences)
+      const valueTransfer = results.reduce((sum, r) => {
+        const nominalVcPayout = r.exit * vcOwnership; // What VC would get with simple pro-rata
+        const actualVcPayout = r.result.vcPayout;
+        const transfer = actualVcPayout - nominalVcPayout; // Positive = transferred from founder to VC
+        return sum + r.prob * transfer;
+      }, 0);
+
+      return { expectedValue, variance, stdDev, min, max, valueTransfer };
+    }
+
+    function updateScenarioCharts(scenarios, resultsA, resultsB, paramsA, paramsB) {
+      const labels = scenarios.map(s => s.name);
+      const founderA = resultsA.map(r => r.result.founderPayout / 1e6);
+      const founderB = resultsB.map(r => r.result.founderPayout / 1e6);
+
+      // Scenario Payout Chart
+      if (scenarioChart) scenarioChart.destroy();
+      scenarioChart = new Chart(document.getElementById('scenarioChart'), {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Structure A (Founder)', data: founderA, backgroundColor: 'rgba(59,130,246,0.7)', borderColor: '#3b82f6', borderWidth: 1 },
+            { label: 'Structure B (Founder)', data: founderB, backgroundColor: 'rgba(16,185,129,0.7)', borderColor: '#10b981', borderWidth: 1 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'top' } },
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'Founder Payout ($M)' } } }
+        }
+      });
+
+      // Value Transfer Chart
+      const postA = paramsA.preMoneyValuation + paramsA.investment;
+      const postB = paramsB.preMoneyValuation + paramsB.investment;
+      const vcOwnershipA = paramsA.investment / postA;
+      const vcOwnershipB = paramsB.investment / postB;
+
+      const transferA = resultsA.map(r => (r.result.vcPayout - r.exit * vcOwnershipA) / 1e6);
+      const transferB = resultsB.map(r => (r.result.vcPayout - r.exit * vcOwnershipB) / 1e6);
+
+      if (transferChart) transferChart.destroy();
+      transferChart = new Chart(document.getElementById('transferChart'), {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Structure A (VC Excess)', data: transferA, backgroundColor: 'rgba(59,130,246,0.5)', borderColor: '#3b82f6', borderWidth: 1 },
+            { label: 'Structure B (VC Excess)', data: transferB, backgroundColor: 'rgba(16,185,129,0.5)', borderColor: '#10b981', borderWidth: 1 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const val = context.raw;
+                  return context.dataset.label + ': ' + (val >= 0 ? '+' : '') + '$' + val.toFixed(2) + 'M';
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              title: { display: true, text: 'VC Excess Above Pro-Rata ($M)' },
+              ticks: {
+                callback: function(value) {
+                  return (value >= 0 ? '+' : '') + '$' + value + 'M';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Comparison functions
+    function updateComparison() {
+      const exitValue = parseFloat(document.getElementById('compareSlider').value) * 1e6;
+      document.getElementById('compareExitDisplay').textContent = formatCurrency(exitValue);
+
+      const paramsA = {
+        investment: parseFloat(document.getElementById('investmentA').value) * 1e6,
+        preMoneyValuation: parseFloat(document.getElementById('preMoneyA').value) * 1e6,
+        liquidationMultiple: parseFloat(document.getElementById('liqMultA').value),
+        isParticipating: document.getElementById('participatingA').value === 'true',
+        participationCap: 0, dividendRate: 0, yearsToExit: 0
+      };
+
+      const paramsB = {
+        investment: parseFloat(document.getElementById('investmentB').value) * 1e6,
+        preMoneyValuation: parseFloat(document.getElementById('preMoneyB').value) * 1e6,
+        liquidationMultiple: parseFloat(document.getElementById('liqMultB').value),
+        isParticipating: document.getElementById('participatingB').value === 'true',
+        participationCap: 0, dividendRate: 0, yearsToExit: 0
+      };
+
+      const rA = calculatePayouts(exitValue, paramsA);
+      const rB = calculatePayouts(exitValue, paramsB);
+
+      document.getElementById('founderA').textContent = formatCurrency(rA.founderPayout);
+      document.getElementById('founderPctA').textContent = formatPercent(rA.founderPercentOfExit);
+      document.getElementById('effPreA').textContent = formatCurrency(Math.max(0, rA.effectivePreMoney));
+
+      document.getElementById('founderB').textContent = formatCurrency(rB.founderPayout);
+      document.getElementById('founderPctB').textContent = formatPercent(rB.founderPercentOfExit);
+      document.getElementById('effPreB').textContent = formatCurrency(Math.max(0, rB.effectivePreMoney));
+
+      const diff = rA.founderPayout - rB.founderPayout;
+      const winnerBox = document.getElementById('winnerBox');
+      const winnerText = document.getElementById('winnerText');
+
+      if (diff > 0) {
+        winnerBox.className = 'card bg-blue-100';
+        winnerText.textContent = 'Term Sheet A is better for founders by ' + formatCurrency(diff);
+      } else if (diff < 0) {
+        winnerBox.className = 'card bg-green-100';
+        winnerText.textContent = 'Term Sheet B is better for founders by ' + formatCurrency(-diff);
+      } else {
+        winnerBox.className = 'card bg-gray-100';
+        winnerText.textContent = 'Both term sheets yield equal founder returns';
+      }
+
+      // Update comparison chart
+      const maxExit = Math.max(
+        (paramsA.preMoneyValuation + paramsA.investment) * 5,
+        (paramsB.preMoneyValuation + paramsB.investment) * 5
+      );
+      const step = maxExit / 30;
+      const labels = [], dataA = [], dataB = [];
+
+      for (let exit = 0; exit <= maxExit; exit += step) {
+        labels.push(formatCurrency(exit));
+        dataA.push(calculatePayouts(exit, paramsA).founderPayout / 1e6);
+        dataB.push(calculatePayouts(exit, paramsB).founderPayout / 1e6);
+      }
+
+      if (comparisonChart) comparisonChart.destroy();
+      comparisonChart = new Chart(document.getElementById('comparisonChart'), {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Term Sheet A', data: dataA, borderColor: '#3b82f6', borderWidth: 2, fill: false },
+            { label: 'Term Sheet B', data: dataB, borderColor: '#10b981', borderWidth: 2, fill: false }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { intersect: false, mode: 'index' },
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'Founder Payout ($M)' } } }
+        }
+      });
+    }
+
+    // CSV Export
+    function exportCSV() {
+      const params = getParams();
+      const postMoney = params.preMoneyValuation + params.investment;
+      let csv = 'Exit Multiple,Exit Value,VC Payout,Founder Payout,VC %,Founder %,Effective Pre-Money,% of Nominal\n';
+
+      for (let mult = 0.5; mult <= 10; mult += 0.5) {
+        const exit = postMoney * mult;
+        const r = calculatePayouts(exit, params);
+        const effPct = r.effectivePreMoney / params.preMoneyValuation;
+        csv += `${mult.toFixed(1)}x,${exit.toFixed(0)},${r.vcPayout.toFixed(0)},${r.founderPayout.toFixed(0)},${(r.vcPercentOfExit*100).toFixed(1)}%,${(r.founderPercentOfExit*100).toFixed(1)}%,${r.effectivePreMoney.toFixed(0)},${(effPct*100).toFixed(1)}%\n`;
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sensitivity_analysis.csv';
+      a.click();
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      updateAll();
+    });
+  </script>
+</body>
+</html>
